@@ -25,88 +25,117 @@ def _clip_weights(w: pd.Series, wmin: float, wmax: float) -> pd.Series:
     return w / s if s > 0 else w
 
 def cmd_rebalance(cfg):
-    # parametri
+    import pandas as pd
+    from pathlib import Path
+    from etl.market_data import load_universe_data
+    from research.ranking import rank_universe
+    from research.portfolio import load_portfolio, save_portfolio, diff_portfolios
+
+    # ---- Parametri da config ----
     rb = cfg["rebalance"]
     lookback = rb["lookback_days"]
     skip = rb["skip_recent_days"]
     top_n = rb["top_n"]
     min_mom = rb["min_momentum"]
-    target_weight_mode = rb["target_weight"]
+    target_weight_mode = rb["target_weight"]     # "equal" | "momentum"
     trade_unit = rb["trade_unit"]
     dd_window = rb["dd_window_days"]
-    dd_limit  = rb["dd_limit"]
+    dd_limit  = float(rb["dd_limit"])            # escludi se Drawdown < -dd_limit (=> drawdown > dd_limit)
     vol_window= rb["vol_window_days"]
-    wmax = rb["max_weight"]
-    wmin = rb["min_weight"]
+    wmax = float(rb["max_weight"])
+    wmin = float(rb["min_weight"])
 
-    # dati
+    # ---- Helper pesi ----
+    def _clip_weights_series(w: pd.Series, wmin: float, wmax: float) -> pd.Series:
+        w = w.clip(lower=wmin, upper=wmax)
+        s = w.sum()
+        return w / s if s > 0 else w
+
+    # ---- Dati ----
     df_by_symbol = load_universe_data(cfg, use_cache=True)
     ranking = rank_universe(df_by_symbol, lookback, skip, dd_window, vol_window)
 
-    # filtro drawdown
-    # esclude chi ha drawdown minore di -dd_limit (cioè drawdown > dd_limit in valore assoluto)
-    filt = ranking.dropna(subset=["Momentum","Drawdown"]).copy()
-    filt = filt[filt["Drawdown"] >= -dd_limit]
-    # selezione top per momentum
+    # ---- Filtro drawdown (robusto a colonne duplicate) ----
+    filt = ranking.dropna(subset=["Momentum", "Drawdown"]).copy()
+    col = filt.loc[:, "Drawdown"]
+    if isinstance(col, pd.DataFrame):
+        col = col.iloc[:, 0] # type: ignore # usa la prima se ci fossero duplicati di nome
+    dd_series = col.astype(float)
+    filt = filt[dd_series >= -dd_limit]       # tiene strumenti con drawdown >= -limite
+
+    # ---- Selezione TOP per Momentum ----
     ranked = filt.sort_values("Momentum", ascending=False)
     ranked = ranked[ranked["Momentum"] >= min_mom]
     top = ranked.head(top_n).copy()
 
-    # target weights
+    # ---- Target Weights ----
     if len(top) > 0:
         if target_weight_mode == "equal":
             w = round(1.0 / len(top), 4)
             top["TargetWeight"] = w
-        else:  # momentum
-            # shift per evitare negativi; normalizza; clippa min/max
+        else:
             mom = top["Momentum"].clip(lower=0)
             if mom.sum() == 0:
                 top["TargetWeight"] = round(1.0 / len(top), 4)
             else:
                 w = mom / mom.sum()
-                w = _clip_weights(w, wmin, wmax)
+                w = _clip_weights_series(w, wmin, wmax)
                 top["TargetWeight"] = w.round(4)
     else:
         top["TargetWeight"] = 0.0
 
-    # portfolio locale
-    out_dir = _ensure_outputs(cfg)
+    # ---- Portfolio locale e suggerimenti ----
+    out_dir = Path(cfg['paths']['outputs'])
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     pf_path = out_dir / "portfolio.csv"
     current = load_portfolio(pf_path)
-    target = top[["Symbol","TargetWeight"]].reset_index(drop=True)
+    target = top[["Symbol", "TargetWeight"]].reset_index(drop=True)
 
-    # suggerimenti
     buy, sell, hold = diff_portfolios(current, target)
     suggestions = []
     for s in buy:
-        suggestions.append({"Action":"BUY", "Symbol":s, "Qty":trade_unit, "Note":"new in top"})
+        suggestions.append({"Action": "BUY",  "Symbol": s, "Qty": trade_unit, "Note": "new in top"})
     for s in sell:
-        suggestions.append({"Action":"SELL", "Symbol":s, "Qty":trade_unit, "Note":"out of top"})
+        suggestions.append({"Action": "SELL", "Symbol": s, "Qty": trade_unit, "Note": "out of top"})
     for s in hold:
-        suggestions.append({"Action":"HOLD", "Symbol":s, "Qty":0, "Note":"remain in top"})
+        suggestions.append({"Action": "HOLD", "Symbol": s, "Qty": 0,           "Note": "remain in top"})
 
-    sugg_df = pd.DataFrame(suggestions).sort_values(["Action","Symbol"])
+    sugg_df = pd.DataFrame(suggestions).sort_values(["Action", "Symbol"])
 
-    # salvataggi
+    # ---- Salvataggi ----
     rank_fp = out_dir / "weekly_ranking.csv"
-    top_fp = out_dir / "weekly_top.csv"
+    top_fp  = out_dir / "weekly_top.csv"
     sugg_fp = out_dir / "weekly_suggestions.csv"
+
     ranked.to_csv(rank_fp, index=False)
     top.to_csv(top_fp, index=False)
     sugg_df.to_csv(sugg_fp, index=False)
     save_portfolio(target, pf_path)
 
-    # report txt umano
+    # ---- Report TXT umano ----
     report = out_dir / "weekly_report.txt"
     with open(report, "w", encoding="utf-8") as f:
         f.write("WEEKLY REBALANCE REPORT\n")
         f.write(f"Top selected (N={len(top)}):\n")
         for r in top.itertuples(index=False):
-            f.write(f"  - {r.Symbol}: wt={r.TargetWeight}, mom={getattr(r,'Momentum',None):.3f}, dd={getattr(r,'Drawdown',None):.3f}\n")
+            mom = getattr(r, "Momentum", float("nan"))
+            dd  = getattr(r, "Drawdown", float("nan"))
+            wt  = getattr(r, "TargetWeight", float("nan"))
+            f.write(f"  - {r.Symbol}: wt={wt:.3f}, mom={mom:.3f}, dd={dd:.3f}\n")
         f.write("\nSuggestions:\n")
         for r in sugg_df.itertuples(index=False):
             f.write(f"  {r.Action:>4}  {r.Symbol}  qty={r.Qty}  {r.Note}\n")
-    print(f"Rebalance OK.\nRanking → {rank_fp}\nTop → {top_fp}\nSuggerimenti → {sugg_fp}\nPortfolio aggiornato → {pf_path}\nReport → {report}")
+
+    print(
+        f"Rebalance OK.\n"
+        f"Ranking → {rank_fp}\n"
+        f"Top → {top_fp}\n"
+        f"Suggerimenti → {sugg_fp}\n"
+        f"Portfolio aggiornato → {pf_path}\n"
+        f"Report → {report}"
+    )
+
 
 def cmd_weekly(cfg):
     # comodo: aggiorna dati e poi rebalance
