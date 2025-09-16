@@ -34,7 +34,7 @@ def compute_recent_drawdown(df: pd.DataFrame, window_days: int) -> float:
         return np.nan
     dd = s / s.cummax() - 1.0
     mn = dd.min()
-    return float(mn) if np.isscalar(mn) else float(mn.iloc[0]) 
+    return float(mn) if np.isscalar(mn) else float(mn.iloc[0])  # type: ignore
 
 def compute_volatility(df: pd.DataFrame, window_days: int) -> float:
     if df.empty or "close" not in df.columns:
@@ -45,7 +45,7 @@ def compute_volatility(df: pd.DataFrame, window_days: int) -> float:
         return np.nan
     ret = s.pct_change().dropna()
     std = ret.std()
-    return float(std) if np.isscalar(std) else float(std.iloc[0])
+    return float(std) if np.isscalar(std) else float(std.iloc[0]) # type: ignore
 
 def rank_universe(df_by_symbol: dict, lookback_days: int, skip_recent_days: int,
                   dd_window_days: int, vol_window_days: int) -> pd.DataFrame:
