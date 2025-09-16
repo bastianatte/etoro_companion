@@ -50,6 +50,16 @@
       "cwd": "${workspaceFolder}",
       "args": ["rebalance"],
       "justMyCode": true
+    },
+    {
+      "name": "App: weekly",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/app.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "args": ["weekly"],
+      "justMyCode": true
     }
   ]
 }
