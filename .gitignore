@@ -1,0 +1,19 @@
+# nascondi configurazioni locali di VS Code
+.vscode/
+
+# nascondi i risultati/artefatti generati dal tool
+outputs/
+
+# facoltativo: nascondi anche gli ambienti virtuali Python se li tieni dentro il repo
+.venv/
+env/
+venv/
+
+# file temporanei / cache Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# file temporanei di Jupyter/VSCode
+.ipynb_checkpoints/
