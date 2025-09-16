@@ -8,16 +8,33 @@ def _series_last(s: pd.Series):
 def compute_momentum(df: pd.DataFrame, lookback_days: int, skip_recent_days: int) -> float:
     if df.empty or "close" not in df.columns:
         return np.nan
+
+    # finestra
     end_date = df.index.max() - pd.Timedelta(days=skip_recent_days)
     start_date = end_date - pd.Timedelta(days=lookback_days)
     dfw = df.loc[(df.index >= start_date) & (df.index <= end_date)]
     if dfw.shape[0] < max(20, int(lookback_days * 0.5)):
         return np.nan
-    start_px = dfw["close"].iloc[:1].iat[0]
-    end_px   = dfw["close"].iloc[-1:].iat[0]
+
+    # prendi SEMPRE una Series 'close', anche se ci fossero colonne duplicate
+    close_obj = dfw.loc[:, "close"]
+    if isinstance(close_obj, pd.DataFrame):
+        # se ci sono più colonne "close", usa la prima colonna
+        s = close_obj.iloc[:, 0]
+    else:
+        s = close_obj  # è già una Series
+
+    # valori iniziale/finale (scalari, niente cast diretto su Series)
+    s = s.dropna()
+    if s.empty:
+        return np.nan
+    start_px = s.iloc[0]
+    end_px   = s.iloc[-1]
     if not np.isfinite(start_px) or start_px <= 0:
         return np.nan
-    return (end_px / start_px) - 1.0
+
+    return (float(end_px) / float(start_px)) - 1.0
+
 
 def compute_recent_drawdown(df: pd.DataFrame, window_days: int) -> float:
     if df.empty or "close" not in df.columns:
