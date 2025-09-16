@@ -1,61 +1,51 @@
 import pandas as pd
 import numpy as np
 
-def _series_last(s: pd.Series):
-    # scalare sicuro dall'ultima osservazione
-    return s.iat[-1] if len(s) else np.nan
+def _close_series(df: pd.DataFrame) -> pd.Series:
+    """Ritorna SEMPRE una Series 'close' anche se ci sono colonne duplicate."""
+    obj = df.loc[:, "close"] if "close" in df.columns else None
+    if obj is None:
+        return pd.Series(dtype=float, name="close")
+    return obj.iloc[:, 0] if isinstance(obj, pd.DataFrame) else obj # type: ignore
 
 def compute_momentum(df: pd.DataFrame, lookback_days: int, skip_recent_days: int) -> float:
     if df.empty or "close" not in df.columns:
         return np.nan
-
-    # finestra
     end_date = df.index.max() - pd.Timedelta(days=skip_recent_days)
     start_date = end_date - pd.Timedelta(days=lookback_days)
     dfw = df.loc[(df.index >= start_date) & (df.index <= end_date)]
     if dfw.shape[0] < max(20, int(lookback_days * 0.5)):
         return np.nan
-
-    # prendi SEMPRE una Series 'close', anche se ci fossero colonne duplicate
-    close_obj = dfw.loc[:, "close"]
-    if isinstance(close_obj, pd.DataFrame):
-        # se ci sono più colonne "close", usa la prima colonna
-        s = close_obj.iloc[:, 0]
-    else:
-        s = close_obj  # è già una Series
-
-    # valori iniziale/finale (scalari, niente cast diretto su Series)
-    s = s.dropna()
+    s = _close_series(dfw).dropna()
     if s.empty:
         return np.nan
     start_px = s.iloc[0]
     end_px   = s.iloc[-1]
     if not np.isfinite(start_px) or start_px <= 0:
         return np.nan
-
     return (float(end_px) / float(start_px)) - 1.0
-
 
 def compute_recent_drawdown(df: pd.DataFrame, window_days: int) -> float:
     if df.empty or "close" not in df.columns:
         return np.nan
     start_date = df.index.max() - pd.Timedelta(days=window_days)
-    d = df.loc[df.index >= start_date, ["close"]].copy()
-    if d.empty:
+    s = _close_series(df.loc[df.index >= start_date]).dropna()
+    if s.empty:
         return np.nan
-    cummax = d["close"].cummax()
-    dd = d["close"] / cummax - 1.0
-    return dd.min()  # es. -0.32 = -32%
+    dd = s / s.cummax() - 1.0
+    mn = dd.min()
+    return float(mn) if np.isscalar(mn) else float(mn.iloc[0]) 
 
 def compute_volatility(df: pd.DataFrame, window_days: int) -> float:
     if df.empty or "close" not in df.columns:
         return np.nan
     start_date = df.index.max() - pd.Timedelta(days=window_days)
-    d = df.loc[df.index >= start_date, ["close"]].copy()
-    if d.shape[0] < max(10, int(window_days * 0.5)):
+    s = _close_series(df.loc[df.index >= start_date]).dropna()
+    if s.shape[0] < max(10, int(window_days * 0.5)):
         return np.nan
-    ret = d["close"].pct_change().dropna()
-    return float(ret.std()) if len(ret) else np.nan
+    ret = s.pct_change().dropna()
+    std = ret.std()
+    return float(std) if np.isscalar(std) else float(std.iloc[0])
 
 def rank_universe(df_by_symbol: dict, lookback_days: int, skip_recent_days: int,
                   dd_window_days: int, vol_window_days: int) -> pd.DataFrame:
