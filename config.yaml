@@ -1,5 +1,6 @@
 main:
   universe: ["AAPL","MSFT","NVDA","AMZN","GOOGL","META","ORCL","TSM","BTC-USD","SOL-USD","MATIC-USD"]
+  my_initial_universe: ["AAPL","MSFT","NVDA", "GOOGL","ORCL","TSM","BTC-USD","SOL-USD","MATIC-USD"]
   timeframe: "1d"
   start_date: "2018-01-01"
   end_date: null
@@ -11,7 +12,7 @@ main:
 rebalance:
   lookback_days: 126        # ~6 mesi
   skip_recent_days: 5       # evita l’ultimissima settimana
-  top_n: 6
+  top_n: 9
   min_momentum: -1.0
   target_weight: "momentum"   # "equal" oppure **"momentum"**
   trade_unit: 10
