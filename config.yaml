@@ -10,11 +10,19 @@ main:
 
 rebalance:
   lookback_days: 126        # ~6 mesi
-  skip_recent_days: 5       # evita l'ultimissima settimana (meno rumore)
-  top_n: 6                  # mantieni in portafoglio i migliori 6
-  min_momentum: -1.0        # filtro (puoi alzarlo >0 per essere più selettivo)
-  target_weight: "equal"    # equal-weight tra i top_n
-  trade_unit: 10            # qty fittizia per i suggerimenti (non è execution)
+  skip_recent_days: 5       # evita l’ultimissima settimana
+  top_n: 6
+  min_momentum: -1.0
+  target_weight: "momentum"   # "equal" oppure **"momentum"**
+  trade_unit: 10
+
+  # --- Nuovi parametri rischio / sizing ---
+  dd_window_days: 126         # finestra per drawdown recente
+  dd_limit: 0.35               # escludi se drawdown recente < -35% (cioè >35% in valore assoluto)
+  vol_window_days: 20          # finestra per volatilità (std su rendimenti giornalieri)
+  max_weight: 0.30             # peso massimo per singolo asset
+  min_weight: 0.05             # peso minimo (solo se selezionato nei top)
+
 
 paths:
   data_raw: "data/raw"
