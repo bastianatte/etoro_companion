@@ -9,6 +9,10 @@ from execution.trade_assist import proposals_from_signals
 from research.ranking import rank_universe
 from research.portfolio import load_portfolio, save_portfolio, diff_portfolios
 
+from pathlib import Path
+import pandas as pd
+from research.ranking import rank_universe
+from research.portfolio import load_portfolio, save_portfolio, diff_portfolios
 
 def load_config():
     with open("config.yaml", "r", encoding="utf-8") as f:
@@ -19,42 +23,64 @@ def _ensure_outputs(cfg):
     out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir
 
+def _clip_weights(w: pd.Series, wmin: float, wmax: float) -> pd.Series:
+    w = w.clip(lower=wmin, upper=wmax)
+    s = w.sum()
+    return w / s if s > 0 else w
+
 def cmd_rebalance(cfg):
     # parametri
-    lookback = cfg["rebalance"]["lookback_days"]
-    skip = cfg["rebalance"]["skip_recent_days"]
-    top_n = cfg["rebalance"]["top_n"]
-    min_mom = cfg["rebalance"]["min_momentum"]
-    target_weight_mode = cfg["rebalance"]["target_weight"]
-    trade_unit = cfg["rebalance"]["trade_unit"]
+    rb = cfg["rebalance"]
+    lookback = rb["lookback_days"]
+    skip = rb["skip_recent_days"]
+    top_n = rb["top_n"]
+    min_mom = rb["min_momentum"]
+    target_weight_mode = rb["target_weight"]
+    trade_unit = rb["trade_unit"]
+    dd_window = rb["dd_window_days"]
+    dd_limit  = rb["dd_limit"]
+    vol_window= rb["vol_window_days"]
+    wmax = rb["max_weight"]
+    wmin = rb["min_weight"]
 
     # dati
     df_by_symbol = load_universe_data(cfg, use_cache=True)
-    ranking = rank_universe(df_by_symbol, lookback, skip)
+    ranking = rank_universe(df_by_symbol, lookback, skip, dd_window, vol_window)
 
-    # selezione top
-    ranked = ranking.dropna(subset=["Momentum"]).sort_values("Momentum", ascending=False)
+    # filtro drawdown
+    # esclude chi ha drawdown minore di -dd_limit (cioè drawdown > dd_limit in valore assoluto)
+    filt = ranking.dropna(subset=["Momentum","Drawdown"]).copy()
+    filt = filt[filt["Drawdown"] >= -dd_limit]
+    # selezione top per momentum
+    ranked = filt.sort_values("Momentum", ascending=False)
     ranked = ranked[ranked["Momentum"] >= min_mom]
     top = ranked.head(top_n).copy()
 
     # target weights
-    if target_weight_mode == "equal" and len(top) > 0:
-        w = round(1.0 / len(top), 4)
-        top["TargetWeight"] = w
+    if len(top) > 0:
+        if target_weight_mode == "equal":
+            w = round(1.0 / len(top), 4)
+            top["TargetWeight"] = w
+        else:  # momentum
+            # shift per evitare negativi; normalizza; clippa min/max
+            mom = top["Momentum"].clip(lower=0)
+            if mom.sum() == 0:
+                top["TargetWeight"] = round(1.0 / len(top), 4)
+            else:
+                w = mom / mom.sum()
+                w = _clip_weights(w, wmin, wmax)
+                top["TargetWeight"] = w.round(4)
     else:
         top["TargetWeight"] = 0.0
 
-    # portfolio corrente (locale, non eToro)
+    # portfolio locale
     out_dir = _ensure_outputs(cfg)
     pf_path = out_dir / "portfolio.csv"
     current = load_portfolio(pf_path)
     target = top[["Symbol","TargetWeight"]].reset_index(drop=True)
 
-    # differenze -> suggerimenti di azione
+    # suggerimenti
     buy, sell, hold = diff_portfolios(current, target)
-
-    # costruisci tabella suggerimenti
-    import pandas as pd
     suggestions = []
     for s in buy:
         suggestions.append({"Action":"BUY", "Symbol":s, "Qty":trade_unit, "Note":"new in top"})
@@ -64,18 +90,32 @@ def cmd_rebalance(cfg):
         suggestions.append({"Action":"HOLD", "Symbol":s, "Qty":0, "Note":"remain in top"})
 
     sugg_df = pd.DataFrame(suggestions).sort_values(["Action","Symbol"])
+
     # salvataggi
     rank_fp = out_dir / "weekly_ranking.csv"
     top_fp = out_dir / "weekly_top.csv"
     sugg_fp = out_dir / "weekly_suggestions.csv"
     ranked.to_csv(rank_fp, index=False)
-    target.to_csv(top_fp, index=False)
+    top.to_csv(top_fp, index=False)
     sugg_df.to_csv(sugg_fp, index=False)
-
-    # aggiorna portfolio locale ai nuovi target
     save_portfolio(target, pf_path)
 
-    print(f"Rebalance OK.\nRanking → {rank_fp}\nTop → {top_fp}\nSuggerimenti → {sugg_fp}\nPortfolio aggiornato → {pf_path}")
+    # report txt umano
+    report = out_dir / "weekly_report.txt"
+    with open(report, "w", encoding="utf-8") as f:
+        f.write("WEEKLY REBALANCE REPORT\n")
+        f.write(f"Top selected (N={len(top)}):\n")
+        for r in top.itertuples(index=False):
+            f.write(f"  - {r.Symbol}: wt={r.TargetWeight}, mom={getattr(r,'Momentum',None):.3f}, dd={getattr(r,'Drawdown',None):.3f}\n")
+        f.write("\nSuggestions:\n")
+        for r in sugg_df.itertuples(index=False):
+            f.write(f"  {r.Action:>4}  {r.Symbol}  qty={r.Qty}  {r.Note}\n")
+    print(f"Rebalance OK.\nRanking → {rank_fp}\nTop → {top_fp}\nSuggerimenti → {sugg_fp}\nPortfolio aggiornato → {pf_path}\nReport → {report}")
+
+def cmd_weekly(cfg):
+    # comodo: aggiorna dati e poi rebalance
+    cmd_download(cfg)
+    cmd_rebalance(cfg)
 
 def cmd_download(cfg):
     df_by_symbol = load_universe_data(cfg)
@@ -132,7 +172,9 @@ def main():
     p_sig = sub.add_parser("signals", help="Genera proposte ordine sui dati più recenti")
     p_sig.add_argument("--strategy", default="ma_crossover")
 
-    sub.add_parser("rebalance", help="Calcola ranking momentum e suggerimenti di ribilanciamento")
+    sub.add_parser("rebalance", help="Calcola ranking momentum con filtri rischio e suggerimenti")
+    sub.add_parser("weekly", help="Aggiorna dati e poi calcola il rebalance settimanale")
+
 
 
     args = parser.parse_args()
@@ -145,6 +187,8 @@ def main():
         cmd_signals(cfg, args.strategy)
     elif args.cmd == "rebalance":
         cmd_rebalance(cfg)
+    elif args.cmd == "weekly":
+        cmd_weekly(cfg)
 
 
 if __name__ == "__main__":
