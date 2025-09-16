@@ -1,0 +1,5 @@
+{
+  "python.defaultInterpreterPath": "C:/Users/spina/anaconda3/envs/etoro_companion/python.exe",
+  "python.terminal.activateEnvironment": true,
+  "python.analysis.typeCheckingMode": "basic"
+}

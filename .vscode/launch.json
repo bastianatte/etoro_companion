@@ -1,0 +1,55 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "App: download",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/app.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "download"
+      ],
+      "justMyCode": true
+    },
+    {
+      "name": "App: backtest",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/app.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "backtest",
+        "--strategy",
+        "ma_crossover"
+      ],
+      "justMyCode": true
+    },
+    {
+      "name": "App: signals",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/app.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "signals",
+        "--strategy",
+        "ma_crossover"
+      ],
+      "justMyCode": true
+    },
+    {
+      "name": "App: rebalance",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/app.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "args": ["rebalance"],
+      "justMyCode": true
+    }
+  ]
+}

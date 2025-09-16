@@ -1,0 +1,22 @@
+main:
+  universe: ["AAPL","MSFT","NVDA","AMZN","GOOGL","META","ORCL","TSM","BTC-USD","SOL-USD","MATIC-USD"]
+  timeframe: "1d"
+  start_date: "2018-01-01"
+  end_date: null
+  base_currency: "USD"
+  initial_cash: 100000
+  strategy: "ma_crossover"
+  save_dataset: true
+
+rebalance:
+  lookback_days: 126        # ~6 mesi
+  skip_recent_days: 5       # evita l'ultimissima settimana (meno rumore)
+  top_n: 6                  # mantieni in portafoglio i migliori 6
+  min_momentum: -1.0        # filtro (puoi alzarlo >0 per essere più selettivo)
+  target_weight: "equal"    # equal-weight tra i top_n
+  trade_unit: 10            # qty fittizia per i suggerimenti (non è execution)
+
+paths:
+  data_raw: "data/raw"
+  data_processed: "data/processed"
+  outputs: "outputs"
