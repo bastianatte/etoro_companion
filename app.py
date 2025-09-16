@@ -1,16 +1,12 @@
 import argparse
 import yaml
 from pathlib import Path
+import pandas as pd
 from etl.market_data import load_universe_data
 from research.features import make_features
 from research.strategies import get_strategy
 from research.backtest import run_backtest
 from execution.trade_assist import proposals_from_signals
-from research.ranking import rank_universe
-from research.portfolio import load_portfolio, save_portfolio, diff_portfolios
-
-from pathlib import Path
-import pandas as pd
 from research.ranking import rank_universe
 from research.portfolio import load_portfolio, save_portfolio, diff_portfolios
 
