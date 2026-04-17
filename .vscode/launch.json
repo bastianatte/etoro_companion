@@ -60,6 +60,16 @@
       "cwd": "${workspaceFolder}",
       "args": ["weekly"],
       "justMyCode": true
+    },
+    {
+      "name": "App: report-graphs",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/app.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "args": ["report-graphs"],
+      "justMyCode": true
     }
   ]
 }

@@ -9,28 +9,35 @@ from research.backtest import run_backtest
 from execution.trade_assist import proposals_from_signals
 from research.ranking import rank_universe
 from research.portfolio import load_portfolio, save_portfolio, diff_portfolios
+from reports.plots import plot_top_charts, plot_suggestions_table
 
 def load_config():
     with open("config.yaml", "r", encoding="utf-8") as f:
         return yaml.safe_load(f)    
 
-def _ensure_outputs(cfg):
-    out_dir = Path(cfg['paths']['outputs'])
-    out_dir.mkdir(parents=True, exist_ok=True)
-    return out_dir
+def _init_portfolio_from_config(cfg, out_dir: Path) -> pd.DataFrame:
+    """
+    Se outputs/portfolio.csv non esiste (o è vuoto), crea il primo portfolio
+    usando my_initial_universe dal config con pesi equal-weight.
+    Altrimenti, carica il portfolio esistente.
+    """
+    pf_path = out_dir / "portfolio.csv"
+    current = load_portfolio(pf_path)
+    if current is not None and len(current) > 0:
+        return current
 
-def _clip_weights(w: pd.Series, wmin: float, wmax: float) -> pd.Series:
-    w = w.clip(lower=wmin, upper=wmax)
-    s = w.sum()
-    return w / s if s > 0 else w
+    init_list = cfg.get("my_initial_universe", []) or []
+    if len(init_list) == 0:
+        # nessun iniziale: ritorna vuoto (il rebalance creerà target dai top)
+        return pd.DataFrame(columns=["Symbol", "TargetWeight"])
+
+    w = round(1.0 / len(init_list), 4)
+    init_df = pd.DataFrame({"Symbol": init_list, "TargetWeight": [w] * len(init_list)})
+    save_portfolio(init_df, pf_path)
+    print(f"Portfolio inizializzato da my_initial_universe → {pf_path}")
+    return init_df
 
 def cmd_rebalance(cfg):
-    import pandas as pd
-    from pathlib import Path
-    from etl.market_data import load_universe_data
-    from research.ranking import rank_universe
-    from research.portfolio import load_portfolio, save_portfolio, diff_portfolios
-
     # ---- Parametri da config ----
     rb = cfg["rebalance"]
     lookback = rb["lookback_days"]
@@ -89,7 +96,8 @@ def cmd_rebalance(cfg):
     out_dir.mkdir(parents=True, exist_ok=True)
 
     pf_path = out_dir / "portfolio.csv"
-    current = load_portfolio(pf_path)
+    current = _init_portfolio_from_config(cfg, out_dir)
+
     target = top[["Symbol", "TargetWeight"]].reset_index(drop=True)
 
     buy, sell, hold = diff_portfolios(current, target)
@@ -136,7 +144,6 @@ def cmd_rebalance(cfg):
         f"Report → {report}"
     )
 
-
 def cmd_weekly(cfg):
     # comodo: aggiorna dati e poi rebalance
     cmd_download(cfg)
@@ -167,7 +174,6 @@ def cmd_backtest(cfg, strategy_name):
     summary.to_csv(out, index=False)
     print(f"Backtest completato. Riepilogo: {out}")
 
-
 def cmd_signals(cfg, strategy_name):
     strat = get_strategy(strategy_name)
     df_by_symbol = load_universe_data(cfg, use_cache=True)
@@ -185,6 +191,35 @@ def cmd_signals(cfg, strategy_name):
     else:
         print("Nessuna proposta ordine oggi.")
 
+def cmd_report_graphs(cfg):
+    """
+    Rigenera il ranking/top/suggestions (come cmd_rebalance) e crea i PNG:
+      - weekly_top_momentum.png
+      - weekly_top_drawdown.png
+      - weekly_top_weights.png
+      - weekly_suggestions.png
+    """
+
+    # rifacciamo il rebalance per avere dati consistenti
+    cmd_rebalance(cfg)
+
+    out_dir = Path(cfg["paths"]["outputs"])
+    top_fp  = out_dir / "weekly_top.csv"
+    sugg_fp = out_dir / "weekly_suggestions.csv"
+
+    top_df  = pd.read_csv(top_fp)
+    sugg_df = pd.read_csv(sugg_fp)
+
+    p1, p2, p3 = plot_top_charts(top_df, out_dir, prefix="weekly")
+    p4 = plot_suggestions_table(sugg_df, out_dir, prefix="weekly")
+
+    print("Grafici creati:")
+    print(" ", p1)
+    print(" ", p2)
+    print(" ", p3)
+    print(" ", p4)
+
+
 def main():
     parser = argparse.ArgumentParser(description="eToro Companion CLI")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -199,6 +234,8 @@ def main():
 
     sub.add_parser("rebalance", help="Calcola ranking momentum con filtri rischio e suggerimenti")
     sub.add_parser("weekly", help="Aggiorna dati e poi calcola il rebalance settimanale")
+    sub.add_parser("report-graphs", help="Crea i grafici PNG (momentum, drawdown, pesi, suggerimenti)")
+
 
 
 
@@ -214,6 +251,9 @@ def main():
         cmd_rebalance(cfg)
     elif args.cmd == "weekly":
         cmd_weekly(cfg)
+    elif args.cmd == "report-graphs":
+        cmd_report_graphs(cfg)
+
 
 
 if __name__ == "__main__":

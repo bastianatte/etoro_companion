@@ -1,29 +1,39 @@
 main:
-  universe: ["AAPL","MSFT","NVDA","AMZN","GOOGL","META","ORCL","TSM","BTC-USD","SOL-USD","MATIC-USD"]
-  my_initial_universe: ["AAPL","MSFT","NVDA", "GOOGL","ORCL","TSM","BTC-USD","SOL-USD","MATIC-USD"]
+  base_currency: "USD"
+  initial_cash: 100
   timeframe: "1d"
   start_date: "2018-01-01"
   end_date: null
-  base_currency: "USD"
-  initial_cash: 100000
-  strategy: "ma_crossover"
-  save_dataset: true
+
+  my_initial_universe:
+    ["AAPL","MSFT","NVDA","GOOGL","ORCL","TSM","BTC-USD","SOL-USD","MATIC-USD"]
+  universe:
+    # Core Tech/AI USA (leaders)
+    ["AAPL","MSFT","NVDA","AMZN","GOOGL","META","ORCL","TSM",
+    # Crypto core che segui
+    "BTC-USD","SOL-USD","MATIC-USD",
+    # Altri AI/semis/infrastruttura dati
+    "AMD","AVGO","ASML","ARM","SMCI","SNOW","CRWD","PLTR",
+    # ETF utili (opzionali)
+    "QQQ","SMH",
+    # Alcune delle tue seguite da screenshot (opzionali)
+    "TSLA","DIA","IAG","FCT.MI","LDO.MI"
+    ]
 
 rebalance:
-  lookback_days: 126        # ~6 mesi
-  skip_recent_days: 5       # evita l’ultimissima settimana
+  lookback_days: 126
+  skip_recent_days: 5
   top_n: 9
   min_momentum: -1.0
-  target_weight: "momentum"   # "equal" oppure **"momentum"**
+  target_weight: "momentum"  # "equal" o "momentum"
   trade_unit: 10
 
-  # --- Nuovi parametri rischio / sizing ---
-  dd_window_days: 126         # finestra per drawdown recente
-  dd_limit: 0.35               # escludi se drawdown recente < -35% (cioè >35% in valore assoluto)
-  vol_window_days: 20          # finestra per volatilità (std su rendimenti giornalieri)
-  max_weight: 0.30             # peso massimo per singolo asset
-  min_weight: 0.05             # peso minimo (solo se selezionato nei top)
-
+  # rischio / sizing
+  dd_window_days: 126
+  dd_limit: 0.35
+  vol_window_days: 20
+  max_weight: 0.30
+  min_weight: 0.05
 
 paths:
   data_raw: "data/raw"
