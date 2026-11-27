@@ -17,3 +17,14 @@ __pycache__/
 
 # file temporanei di Jupyter/VSCode
 .ipynb_checkpoints/
+
+# chiavi API e segreti
+.env
+
+# log del trader e interruttore di emergenza
+logs/
+STOP
+
+# dati personali del conto: restano solo sul PC
+journal/
+data/instruments.json

@@ -28,3 +28,17 @@ paths:
   data_raw: "data/raw"
   data_processed: "data/processed"
   outputs: "outputs"
+
+# --- Trader autonomo (regole fisse, applicate dal codice in trader/rules.py) ---
+trader:
+  leverage: 1                  # mai leva
+  allow_short: false           # solo acquisti
+  max_position_weight: 0.25    # max 25% del conto su un singolo strumento
+  min_order_usd: 20            # eToro minimo $10, ma la vendita costa ~$1 fisso: sotto $20 non conviene
+  stop_loss_min_pct: 0.05      # stop-loss obbligatorio tra -5% ...
+  stop_loss_max_pct: 0.25      # ... e -25% dal prezzo corrente
+  max_orders_per_day: 3        # acquisti + vendite
+  max_orders_per_week: 5
+  min_equity_usd: 140          # sotto questa soglia: niente nuovi acquisti (solo vendite)
+  blocked_exchanges: ["CFD"]   # niente CFD
+  blocked_keywords: ["Anthropic"]   # conflitto di interessi: Claude è fatto da Anthropic
